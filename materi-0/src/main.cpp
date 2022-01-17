@@ -1,85 +1,207 @@
 #include <Arduino.h>
+
 #define BOBOT_UTS 0.4
 #define BOBOT_UAS 0.6
 
-const float bA = 85.0;
-const float bB = 75.0;
-const float bC = 60.0;
-const float bD = 40.0;
+// untuk data mahasiswa, gunakan struct
+struct Mahasiswa
+{
+  long nim;
+  String nama;
+  float uts;
+  float uas;
+  float nilai_angka;
+  char nilai_huruf;
+};
 
-long nim;
-String nama;
-float uts;
-float uas;
-float nilai_angka;
-char nilai_huruf;
+// data mahasiswa awal, langsung inisialisasi
+#define N_SISWA 5
+Mahasiswa siswa[N_SISWA] = {
+    {13300991, "Eko"},
+    {13300992, "Dwiki"},
+    {13300993, "Trias"},
+    {13300994, "Catur"},
+    {13300995, "Panca"}};
 
+/* menampilkan prompt dan tunggu jawaban */
 void tanya(char s[])
 {
+  // habiskan data sebelumnya
   while (Serial.available())
     Serial.read();
 
+  // cetak prompt
   Serial.print(s);
   Serial.print(": ");
+
+  // tunggu sampai ada data
   while (!Serial.available())
   {
   }
 }
+
+/* input data N mahasiswa */
 void inputData()
 {
-  Serial.println("Masukkan data");
-  tanya("NIM");
-  nim = Serial.parseInt();
-  Serial.println(nim);
+  // pakai looping
+  for (int i = 0; i < N_SISWA; i++)
+  {
+    Serial.print(siswa[i].nim);
+    Serial.print(" ");
+    Serial.println(siswa[i].nama);
 
-  tanya("Nama");
-  nama = Serial.readStringUntil('\n');
-  Serial.println(nama);
-  tanya("UTS");
-  uts = Serial.parseFloat();
-  Serial.println(uts);
+    tanya("UTS");
+    siswa[i].uts = Serial.parseFloat();
+    Serial.println(siswa[i].uts);
 
-  tanya("UAS");
-  uas = Serial.parseFloat();
-  Serial.println(uas);
+    tanya("UAS");
+    siswa[i].uas = Serial.parseFloat();
+    Serial.println(siswa[i].uas);
+  }
 }
 
-float nilaiAngka(float uts, float uas)
+/* hitung nilai angka N mahasiswa */
+void nilaiAngka()
 {
-  return (BOBOT_UTS * uts) + (BOBOT_UAS * uas);
+  for (int i = 0; i < N_SISWA; i++)
+  {
+    siswa[i].nilai_angka =
+        (BOBOT_UTS * siswa[i].uts) +
+        (BOBOT_UAS * siswa[i].uas);
+  }
 }
 
-char nilaiHuruf(float angka)
+/* hitung rata-rata dari semua mahasiswa */
+float rerata()
 {
-  if (angka > bA)
+  float sum = 0;
+  for (int i = 0; i < N_SISWA; i++)
   {
-    return 'A';
+    sum = sum + siswa[i].nilai_angka;
   }
-  else if (angka > bB)
-  {
-    return 'B';
-  }
-  else if (angka > bC)
-  {
-    return 'C';
-  }
-  else if (angka > bD)
-  {
-    return 'D';
-  }
-  return 'E';
+  return sum / N_SISWA;
 }
 
-void cetakData()
+/* hitung standar deviasi dari semua mahasiswa
+ * input nr = nilai rata-rata
+ * return standar deviasi
+ */
+float stdDev(float nr)
 {
-  char buffer[60];
+  float variance = 0;
+  for (int i = 0; i < N_SISWA; i++)
+  {
+    variance += pow(siswa[i].nilai_angka - nr, 2);
+  }
+  variance /= N_SISWA - 1;
 
-  sprintf(buffer, "%8ul %-15s %6.2f %c",
-          nim, nama.c_str(), nilai_angka, nilai_huruf);
-  Serial.println(buffer);
-  Serial.println("----------");
+  return sqrt(variance);
 }
 
+/* hitung nilai huruf semua mahasiswa
+ * Input: nr = rerata
+ *       sd = standard deviasi
+ * Proses: semua mahasiswa akan terupdate nilai_hurufnya
+ */
+void nilaiHuruf(float nr, float sd)
+{
+  // tentukan dulu batas nilai huruf
+  float batas_a = nr + sd;
+  float batas_b = nr;
+  float batas_c = nr - sd;
+  float batas_d = nr - 2 * sd;
+
+  for (int i = 0; i < N_SISWA; i++)
+  {
+    // gunakan pencabangan untuk menentukan nilai huruf
+    float nilai_siswa = siswa[i].nilai_angka;
+    if (nilai_siswa >= batas_a)
+    {
+      siswa[i].nilai_huruf = 'A';
+    }
+    else if (nilai_siswa >= batas_b)
+    {
+      siswa[i].nilai_huruf = 'B';
+    }
+    else if (nilai_siswa >= batas_c)
+    {
+      siswa[i].nilai_huruf = 'C';
+    }
+    else if (nilai_siswa >= batas_d)
+    {
+      siswa[i].nilai_huruf = 'D';
+    }
+    else
+    {
+      siswa[i].nilai_huruf = 'E';
+    }
+  }
+}
+
+String deskripsi(char huruf)
+{
+  String d;
+  // gunakan pencabangan (switch) untuk menentukan deskripsi
+  switch (huruf)
+  {
+  case 'A':
+    d = "Amat Bagus";
+    break;
+  case 'B':
+    d = "Bagus";
+    break;
+  case 'C':
+    d = "Cukup";
+    break;
+  case 'D':
+    d = "Kurang";
+    break;
+  case 'E':
+    d = "Tidak lulus";
+    break;
+  default:
+    d = "Input invalid";
+    break;
+  }
+  return d;
+}
+
+void cetakData(float nr, float sd)
+{
+  char sbuffer[60]; // variabel lokal
+  String d;
+  char fheader[] = "%8s %-15s %6s %5s %s";
+  char fbaris[] = "%8lu %-15s %6.2f %5c %s";
+  char garis[] = "---------------------------------------";
+
+  // cetak rata-rata & stdev
+  Serial.print("Rerata Kelas: ");
+  Serial.println(nr);
+  Serial.print("StDev Kelas : ");
+  Serial.println(sd);
+  // cetak header
+  Serial.println(garis);
+  sprintf(sbuffer, fheader,
+          "NIM", "Nama", "Angka", "Huruf", "Deskripsi");
+  Serial.println(sbuffer);
+  Serial.println(garis);
+
+  // cetak semua baris
+  for (int i = 0; i < N_SISWA; i++)
+  {
+    d = deskripsi(siswa[i].nilai_huruf);
+    sprintf(sbuffer, fbaris,
+            siswa[i].nim,
+            siswa[i].nama.c_str(),
+            siswa[i].nilai_angka,
+            siswa[i].nilai_huruf,
+            d.c_str());
+    Serial.println(sbuffer);
+  }
+  Serial.println(garis);
+}
+
+// inisialisasi
 void setup()
 {
   Serial.begin(9600);
@@ -87,10 +209,13 @@ void setup()
   Serial.println("Pengolahan Nilai");
 }
 
+// loop utama
 void loop()
 {
   inputData();
-  nilai_angka = nilaiAngka(uts, uas);
-  nilai_huruf = nilaiHuruf(nilai_angka);
-  cetakData();
+  nilaiAngka();
+  float nr = rerata();
+  float sd = stdDev(nr);
+  nilaiHuruf(nr, sd);
+  cetakData(nr, sd);
 }
